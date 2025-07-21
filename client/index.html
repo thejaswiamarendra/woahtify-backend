@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client</title>
+</head>
+<body>
+<h1>WebSocket Client</h1>
+<h2>Login</h2>
+<div>
+    Username: <input type="text" id="userNameInput" placeholder="Enter your userName">
+    Password: <input type="password" id="passwordInput" placeholder="Enter your password">
+    <button onclick="login()">Login</button>
+</div>
+<div>
+    Room Name: <input type="text" id="roomnameInput" placeholder="Enter room name">
+    <button onclick="createRoom()">Create Room</button>
+    <button onclick="joinRoom()">Join Room</button>
+</div>
+<div>
+    <p>Status: <span id="status">Disconnected</span></p>
+</div>
+<div id="user-list">
+    <h3>Connected Users</h3>
+    <!-- User list will be rendered here -->
+</div>
+</div>
+<div>
+    <input type="text" id="messageInput" placeholder="Enter your message">
+    <button onclick="sendMessage()">Send</button>
+</div>
+<hr>
+<h2>Song Suggestions</h2>
+<div>
+    <input type="text" id="songInput" placeholder="Enter song name">
+    <button onclick="suggestSong()">Suggest Song</button>
+</div>
+<div id="song-list">
+    <!-- Song list will be rendered here -->
+</div>
+<div id="current-song">
+
+</div>
+<hr>
+<div id="messages"></div>
+
+<script>
+    // --- State variables moved to a higher scope ---
+    let ws;
+    let jwtToken;
+    let currentUsername;
+    let currentUserType; // To track if the user is a host or guest
+    let connectionID
+
+
+    function login() {
+        currentUsername = document.getElementById("userNameInput").value;
+        // For now, we assume a logged-in user is a potential host
+        const password = document.getElementById("passwordInput").value;
+
+        const payload = {
+            userName: currentUsername,
+            password: password
+        };
+
+        fetch("http://localhost:8080/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Login failed");
+            }
+            // .json() is async, so we return the promise
+            return response.json();
+        })
+        .then(data => {
+            // Handle the resolved JSON data here
+            jwtToken = data.token;
+            console.log("Login successful. Token:", jwtToken);
+            alert("Login successful!");
+        })
+        .catch(error => {
+            console.error("Error during login:", error);
+            alert("Login failed. Check console for details.");
+        });
+    }
+
+    function createRoom() {
+        if (!jwtToken || !currentUsername) {
+            alert("You must be logged in to create a room.");
+            return;
+        }
+        const roomName = document.getElementById("roomnameInput").value;
+        if (!roomName) {
+            alert("Please enter a room name.");
+            return;
+        }
+
+        const payload = {
+            "userName": currentUsername,
+            "roomname": roomName
+        };
+
+        fetch("http://localhost:8080/create-room", {
+            method: "POST",
+            headers: {
+                // Typo fixed here
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + jwtToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Room creation failed");
+            }
+            console.log("Room created successfully");
+            // Automatically join the room after creating it
+            joinRoom();
+        })
+        .catch(error => {
+            console.error("Error creating room:", error);
+            alert("Room creation failed. Check console for details.");
+        });
+    }
+
+    function joinRoom() {
+        const roomName = document.getElementById("roomnameInput").value;
+        // Get userName directly from the input field. This allows guests to join without logging in.
+        const userName = document.getElementById("userNameInput").value;
+
+        // Determine user type for the current client session
+        if (jwtToken && userName === currentUsername) {
+            currentUserType = "host";
+        } else {
+            currentUserType = "guest";
+        }
+
+        if (!userName || !roomName) {
+            alert("Please enter a userName and a room name to join.");
+            return;
+        }
+
+        ws = new WebSocket(`ws://localhost:8080/join-room?userName=${userName}&roomName=${roomName}`);
+
+        ws.onopen = function() {
+            console.log("Connected to WebSocket server");
+            document.getElementById("status").textContent = `Connected to room: ${roomName}`;
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log(data.connectionID, data.message, data.currentSongQueue, data.connectedUserList, data.sender)
+            // Asynchronously update different parts of the UI
+            if (data.connectionID && data.sender.userName == userName){
+                connectionID = data.connectionID;
+            }
+            if (data.message) {
+                renderMessage(data);
+            }
+            // The backend now sends the queue as an array
+            if (data.currentSongQueue) {
+                renderSongList(data.currentSongQueue);
+            }
+            if (data.currentSong) {
+                renderCurrentSong(data.currentSong);
+            }
+            if (data.connectedUserList) {
+                renderUserList(data.connectedUserList);
+            }
+        };
+
+        ws.onclose = function() {
+            console.log("WebSocket connection closed.");
+            document.getElementById("user-list").innerHTML = "<h3>Connected Users</h3>";
+            document.getElementById("status").textContent = "Disconnected";
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+        };
+    }
+
+    function renderMessage(data) {
+        const messageDisplay = document.getElementById("messages");
+        messageDisplay.innerHTML += `<p><strong>${data.sender.userName}:</strong> ${data.message}</p>`;
+    }
+
+    function renderSongList(songQueue) {
+        const songListDiv = document.getElementById("song-list");
+        // The song queue is now an array, ordered by priority from the server.
+        let html = "<h3>Song Queue</h3><ol>";
+        for (const song of songQueue) {
+            html += `<li>${song.songName} (Votes: ${song.voteCount}) <button onclick="voteForSong('${song.songName}')">Vote</button></li>`;
+        }
+        html += "</ol>";
+        songListDiv.innerHTML = html;
+    }
+
+    function renderCurrentSong(song) {
+        const currentSongDiv = document.getElementById("current-song")
+        let html = "<h2>Playing</h2>"
+        html += `<h3>${song.songName}</h3><p>Suggested By: ${song.suggestedBy.userName} Votes Received: ${song.voteCount}</p><button onclick="skipSong('${song.songName}')">Skip</button>`
+        currentSongDiv.innerHTML = html;
+    }
+
+    function renderUserList(userList) {
+        const userListDiv = document.getElementById("user-list");
+        let html = "<h3>Connected Users</h3><ul>";
+        for (const user of userList) {
+            html += `<li>${user.userName} (${user.userType})</li>`;
+        }
+        html += "</ul>";
+        userListDiv.innerHTML = html;
+    }
+
+    function sendMessage() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert("You are not connected to a room.");
+            return;
+        }
+        let input = document.getElementById("messageInput");
+        let message = input.value;
+        ws.send(message);
+        input.value = "";
+    }
+
+    function suggestSong() {
+        const songName = document.getElementById("songInput").value;
+        const roomName = document.getElementById("roomnameInput").value;
+
+        if (!songName || !roomName || !connectionID) {
+            alert("Please enter a userName, room name, and song name.");
+            return;
+        }
+
+        const payload = {
+            roomname: roomName,
+            songname: songName,
+            connectionID: connectionID,
+        };
+
+        fetch("http://localhost:8080/suggest-song", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        }).then(res => {
+            if (!res.ok) alert("Failed to suggest song.");
+            else document.getElementById("songInput").value = "";
+        });
+    }
+
+    function voteForSong(songName) {
+        const roomName = document.getElementById("roomnameInput").value;
+        const userName = document.getElementById("userNameInput").value;
+
+        if (!songName || !roomName || !connectionID) {
+            alert("Cannot vote. Please ensure you have a userName and are in a room.");
+            return;
+        }
+
+        const payload = {
+            roomname: roomName,
+            songname: songName,
+            connectionID: connectionID,
+        };
+
+        fetch("http://localhost:8080/vote-for-song", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        }).then(res => {
+            if (!res.ok) alert("Failed to vote for song.");
+        });
+    }
+
+    function skipSong(songName) {
+        const roomName = document.getElementById("roomnameInput").value;
+        const userName = document.getElementById("userNameInput").value;
+
+        if (!songName || !roomName || !connectionID) {
+            alert("Cannot skip. Please ensure you have a userName and are in a room.");
+            return;
+        }
+
+        const payload = {
+            roomname: roomName,
+            songname: songName,
+            connectionID: connectionID,
+        };
+
+        fetch("http://localhost:8080/skip-song", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        }).then(res => {
+            if (!res.ok) alert("Failed to skip song.");
+        });
+    }
+</script>
+</body>
+</html>
