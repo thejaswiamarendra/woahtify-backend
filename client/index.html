@@ -155,7 +155,7 @@
 
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            console.log(data.connectionID, data.message, data.currentSongQueue, data.connectedUserList, data.sender)
+            console.log(data.connectionID, data.message, data.currentSongQueue, data.connectedUserList, data.sender, data.currentSong)
             // Asynchronously update different parts of the UI
             if (data.connectionID && data.sender.userName == userName){
                 connectionID = data.connectionID;
@@ -169,6 +169,9 @@
             }
             if (data.currentSong) {
                 renderCurrentSong(data.currentSong);
+            }
+            if (!data.currentSong) {
+                renderCurrentSong(null)
             }
             if (data.connectedUserList) {
                 renderUserList(data.connectedUserList);
@@ -203,9 +206,12 @@
     }
 
     function renderCurrentSong(song) {
+
         const currentSongDiv = document.getElementById("current-song")
         let html = "<h2>Playing</h2>"
-        html += `<h3>${song.songName}</h3><p>Suggested By: ${song.suggestedBy.userName} Votes Received: ${song.voteCount}</p><button onclick="skipSong('${song.songName}')">Skip</button>`
+        if (song != null) {
+            html += `<h3>${song.songName}</h3><p>Suggested By: ${song.suggestedBy.userName} Votes Received: ${song.voteCount}</p><button onclick="skipSong('${song.songName}')">Skip</button>`
+        }
         currentSongDiv.innerHTML = html;
     }
 

@@ -47,8 +47,6 @@ func (a *API) JoinRoomHandler(w http.ResponseWriter, r *http.Request) {
 	roomName := r.URL.Query().Get("roomName")
 	userName := r.URL.Query().Get("userName")
 
-	// A quick, non-atomic check to fail fast if the room doesn't exist at all.
-	// The atomic check happens inside joinUser.
 	if !a.WSServer.isRoomPresent(roomName) {
 		log.Printf("Room not found %s", roomName)
 		w.Header().Set("Content-Type", "application/json")
@@ -63,13 +61,9 @@ func (a *API) JoinRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Atomically join the user to the room. This single call handles all
-	// validation (host presence, user uniqueness) and state modification.
 	user, connID, err := a.WSServer.joinUser(roomName, userName, conn)
 	if err != nil {
 		log.Printf("Failed to join room %s for user %s: %v", roomName, userName, err)
-		// Inform the client why the connection is being closed.
-		// Use a policy violation code for business logic failures.
 		msg := websocket.FormatCloseMessage(websocket.ClosePolicyViolation, err.Error())
 		conn.WriteMessage(websocket.CloseMessage, msg)
 		conn.Close()
@@ -78,7 +72,6 @@ func (a *API) JoinRoomHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("User %s joined room %s as %s", user.UserName, roomName, user.UserType)
 
-	// Each client gets its own goroutine to read messages
 	go a.WSServer.handleClientMessages(roomName, connID, conn)
 }
 

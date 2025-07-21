@@ -222,7 +222,7 @@ func (ws *WSServer) joinUser(roomName string, userName string, conn *websocket.C
 	room.ConnectionIDUserMap[connID] = conn
 	room.ConnectedUserList = append(room.ConnectedUserList, &user)
 
-	ws.broadcastUpdate(roomName, encryptedConnID)
+	ws.broadcastUpdate(roomName, encryptedConnID, user)
 	return user, encryptedConnID, nil
 }
 
@@ -259,7 +259,7 @@ func (ws *WSServer) removeUser(roomName, connectionID string, conn *websocket.Co
 		delete(ws.roomBroadcastMap, roomName)
 		delete(ws.roomConfigMap, roomName)
 	} else {
-		ws.broadcastUpdate(roomName, connectionID)
+		ws.broadcastUpdate(roomName, connectionID, user)
 	}
 	return nil
 }
@@ -302,7 +302,7 @@ func (ws *WSServer) addSuggestedSong(songName, roomName, connectionID string) er
 			SuggestedBy:        user,
 			SuggestedTimestamp: time.Now(),
 		}
-		ws.broadcastUpdate(roomName, connectionID)
+		ws.broadcastUpdate(roomName, connectionID, user)
 		return nil
 	}
 
@@ -317,7 +317,7 @@ func (ws *WSServer) addSuggestedSong(songName, roomName, connectionID string) er
 		},
 	)
 
-	ws.broadcastUpdate(roomName, connectionID)
+	ws.broadcastUpdate(roomName, connectionID, user)
 	return nil
 }
 
@@ -354,7 +354,7 @@ func (ws *WSServer) voteForSong(songName, roomName, connectionID string) error {
 			}
 			votes := append(song.Votes, &user)
 			ws.roomConfigMap[roomName].SongQueue.update(song, votes)
-			ws.broadcastUpdate(roomName, connectionID)
+			ws.broadcastUpdate(roomName, connectionID, user)
 			log.Printf("User %s cast a vote for the song %s", user.UserName, songName)
 			return nil
 		}
@@ -390,6 +390,10 @@ func (ws *WSServer) skipSong(songName, roomName, connectionID string) error {
 		log.Printf("Only a host can skip a song, %s", user.UserType)
 		return fmt.Errorf("only a host can skip a song")
 	}
+	if room.CurrentSong == nil {
+		log.Printf("No song is playing at the moment")
+		return nil
+	}
 	if songName != room.CurrentSong.SongName {
 		log.Printf("Can't skip a song that is not playing")
 		return fmt.Errorf("can't skip a song that is not playing")
@@ -397,13 +401,13 @@ func (ws *WSServer) skipSong(songName, roomName, connectionID string) error {
 	room.CurrentSong = nil
 	if len(room.SongQueue) == 0 {
 		log.Printf("no more songs in the queue")
-		return fmt.Errorf("no more songs in the queue")
+		return nil
 	}
 
 	nextSong := heap.Pop(&room.SongQueue).(*SongConfig)
 	room.CurrentSong = nextSong
 	log.Printf("Skipped %s, playing %s", songName, nextSong.SongName)
-	ws.broadcastUpdate(roomName, connectionID)
+	ws.broadcastUpdate(roomName, connectionID, user)
 	return nil
 }
 
@@ -453,18 +457,12 @@ func (ws *WSServer) handleClientMessages(roomName, connectionID string, conn *we
 
 // broadcastUpdate must be called with the mutex held.
 // It constructs the current state and sends it to the room's broadcast channel.
-func (ws *WSServer) broadcastUpdate(roomName, connectionID string) {
+func (ws *WSServer) broadcastUpdate(roomName, connectionID string, sender WSUser) {
 	room, roomExists := ws.roomConfigMap[roomName]
 	if !roomExists {
 		return
 	}
-	log.Print("In BroadCast Message")
-	for _, song := range room.SongQueue {
-		log.Printf("Song %s, Votes %v", song.SongName, song.VoteCount)
-	}
-	conn := room.ConnectionIDUserMap[connectionID]
-	sender := room.Clients[conn]
-	log.Printf("Connection %s User %s for connection ID %+v", connectionID, sender.UserName, conn)
+
 	broadcastMessage := BroadcastMessage{
 		Sender:            sender,
 		RoomName:          roomName,
