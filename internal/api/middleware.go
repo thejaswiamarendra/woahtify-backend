@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
+
+	"log"
 )
 
 // AuthMiddleware checks for a valid authentication token in the request header.
@@ -17,7 +20,6 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// The header should be in the format "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -25,14 +27,23 @@ func (a *API) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Dummy token validation
-		if parts[1] != "dummy-jwt-token-for-testuser" {
+		spotify_token_info, err := ValidateJWT(parts[1])
+		if err != nil {
+			log.Printf("Error while trying to validate JWT %s", err)
+		}
+
+		if _, exists := a.AccessTokenMap[spotify_token_info.UserName]; !exists {
 			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(ErrorResponse{Error: "Access denied: Invalid token"})
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "Access denied: Invalid user"})
 			return
 		}
 
-		// If the token is valid, call the next handler in the chain
+		if time.Now().Unix() > spotify_token_info.Expiry {
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "Access denied: Token expired"})
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

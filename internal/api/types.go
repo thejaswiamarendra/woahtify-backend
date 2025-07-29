@@ -12,8 +12,12 @@ type LoginRequest struct {
 }
 
 // LoginResponse defines the structure for a successful login response.
-type LoginResponse struct {
+type SpotifyOAuthResponse struct {
 	Token string `json:"token"`
+}
+
+type LoginResponse struct {
+	RedirectURL string `json:"redirectURL"`
 }
 
 // ErrorResponse defines the structure for a generic error response.

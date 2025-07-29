@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+
 )
 
-func GetEnv(key, fallback string) string {
+func GetEnv(key string) (string, error) {
 	if val, exists := os.LookupEnv(key); exists {
-		return val
+		return val, nil
 	}
-	return fallback
+	return "", fmt.Errorf("Env variable %s not found", key)
 }
 
 func GenerateSecureRandomString(length int) (string, error) {
@@ -25,17 +26,14 @@ func GenerateSecureRandomString(length int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(bytes)[:length], nil
 }
 
-// Encode encodes bytes to base64 string
 func Encode(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-// Decode decodes a base64 string to bytes
 func Decode(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
 }
 
-// Encrypt encrypts a plain text string using AES-CFB with a given secret
 func Encrypt(plainText, key string) (string, error) {
 	keyBytes := []byte(key)
 	if len(keyBytes) != 16 && len(keyBytes) != 24 && len(keyBytes) != 32 {
@@ -60,7 +58,6 @@ func Encrypt(plainText, key string) (string, error) {
 	return Encode(final), nil
 }
 
-// Decrypt decrypts a base64-encoded AES-CFB ciphertext using a given secret
 func Decrypt(encrypted, key string) (string, error) {
 	keyBytes := []byte(key)
 	if len(keyBytes) != 16 && len(keyBytes) != 24 && len(keyBytes) != 32 {

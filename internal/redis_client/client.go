@@ -15,7 +15,11 @@ type Redis struct {
 }
 
 func NewRedis(ctx context.Context) *Redis {
-	redisAddr := utils.GetEnv("REDIS_ADDR", "redis:6379")
+	redisAddr, err := utils.GetEnv("REDIS_ADDR")
+	if err != nil {
+		log.Print(err)
+		return nil
+	}
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: redisAddr,
 	})

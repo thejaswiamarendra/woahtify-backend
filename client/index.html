@@ -55,39 +55,22 @@
 
 
     function login() {
-        currentUsername = document.getElementById("userNameInput").value;
-        // For now, we assume a logged-in user is a potential host
-        const password = document.getElementById("passwordInput").value;
-
-        const payload = {
-            userName: currentUsername,
-            password: password
-        };
-
-        fetch("http://localhost:8080/login", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error("Login failed");
-            }
-            // .json() is async, so we return the promise
-            return response.json();
-        })
-        .then(data => {
-            // Handle the resolved JSON data here
-            jwtToken = data.token;
-            console.log("Login successful. Token:", jwtToken);
-            alert("Login successful!");
-        })
-        .catch(error => {
-            console.error("Error during login:", error);
-            alert("Login failed. Check console for details.");
-        });
+        fetch("http://127.0.0.1:8080/login")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to get login URL");
+                }
+                return response.json();
+            })
+            .then(data => {
+                const spotifyAuthURL = data.redirectURL;
+                // Redirect user to Spotify OAuth login
+                window.location.href = spotifyAuthURL;
+            })
+            .catch(error => {
+                console.error("Error during login:", error);
+                alert("Login failed. Check console for details.");
+            });
     }
 
     function createRoom() {
@@ -106,7 +89,7 @@
             "roomname": roomName
         };
 
-        fetch("http://localhost:8080/create-room", {
+        fetch("http://127.0.0.1:8080/create-room", {
             method: "POST",
             headers: {
                 // Typo fixed here
@@ -146,7 +129,7 @@
             return;
         }
 
-        ws = new WebSocket(`ws://localhost:8080/join-room?userName=${userName}&roomName=${roomName}`);
+        ws = new WebSocket(`ws://127.0.0.1:8080/join-room?userName=${userName}&roomName=${roomName}`);
 
         ws.onopen = function() {
             console.log("Connected to WebSocket server");
@@ -251,7 +234,7 @@
             connectionID: connectionID,
         };
 
-        fetch("http://localhost:8080/suggest-song", {
+        fetch("http://127.0.0.1:8080/suggest-song", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -276,7 +259,7 @@
             connectionID: connectionID,
         };
 
-        fetch("http://localhost:8080/vote-for-song", {
+        fetch("http://127.0.0.1:8080/vote-for-song", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -300,7 +283,7 @@
             connectionID: connectionID,
         };
 
-        fetch("http://localhost:8080/skip-song", {
+        fetch("http://127.0.0.1:8080/skip-song", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
